@@ -34,7 +34,7 @@
     <!-- 初期入力画面 -->
     <div id="start-menu" class="pointer-auto bg-white/90 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full overflow-y-auto max-h-[90vh]">
         <h1 class="text-3xl font-bold mb-2 text-gray-800">3D迷路マルチ</h1>
-        <p class="text-xs text-blue-600 mb-4 font-bold" id="auth-status">接続中...</p>
+        <p class="text-xs text-blue-600 mb-4 font-bold" id="auth-status">認証サーバーに接続中...</p>
         
         <div class="text-left mb-6 space-y-4">
             <div>
@@ -66,10 +66,10 @@
             </div>
         </div>
 
-        <button id="start-btn" disabled class="w-full bg-blue-400 text-white font-bold py-3 px-6 rounded-lg transition-all text-xl cursor-not-allowed shadow-md">
+        <button id="start-btn" disabled class="w-full bg-gray-400 text-white font-bold py-3 px-6 rounded-lg transition-all text-xl cursor-not-allowed shadow-md">
             接続を待っています...
         </button>
-        <p class="text-[10px] text-gray-400 mt-4">※レベルは全員共通のロビーで同期されます</p>
+        <p class="text-[10px] text-gray-400 mt-4">※Firebaseによるリアルタイム同期が有効です</p>
     </div>
 
     <!-- ゲーム中UI -->
@@ -111,16 +111,25 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, onSnapshot, collection, query, serverTimestamp, addDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, addDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-// --- Firebase Configuration Guard (Fixed) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-    apiKey: "demo", authDomain: "demo.firebaseapp.com", projectId: "demo-project", storageBucket: "demo.appspot.com", messagingSenderId: "000", appId: "000"
-};
+// --- Firebase Configuration ---
+// Canvas環境のグローバル変数 __firebase_config を優先的に使用します
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+    ? JSON.parse(__firebase_config) 
+    : {
+        apiKey: "AIzaSyDOqBobe4ySp_kkoqbB1CeNly8WDzwXBMw",
+        authDomain: "hu31-a6d5d.firebaseapp.com",
+        projectId: "hu31-a6d5d",
+        storageBucket: "hu31-a6d5d.firebasestorage.app",
+        messagingSenderId: "942344504046",
+        appId: "1:942344504046:web:a5ba492ea3aa3f0808e9ff"
+    };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'maze-multi-demo';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'maze-multi-live';
 
 let currentUser = null;
 let players = {}; 
@@ -130,7 +139,7 @@ let myOutfit = { hat: '#ff0000', shirt: '#3b82f6', pants: '#22c55e' };
 // --- Random Name Generator ---
 const NAME_PARTS = {
     part1: ["やんちゃ", "クール", "クセ強", "個性的", "アウトロー", "無口", "陽キャ", "陰キャ", "ミステリアス", "自由人", "破天荒"],
-    part2: ["な", "る", "的", "の", "系", "式", "風", "っぽい"],
+    part2: ["な", "る", "的な", "の", "系", "式", "風", "っぽい"],
     part3: ["一般人", "ラッパー", "ゲーマー", "プログラマー", "ハッカー", "ストリーマー", "クリエイター", "設計者", "探索者", "システム屋"]
 };
 
@@ -183,37 +192,42 @@ async function init() {
         mouseX = e.clientX;
     });
 
-    // Auth logic
+    // Auth logic: RULE 3 - Auth Before Queries
     const initAuth = async () => {
         try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                console.log("Attempting Custom Token Auth...");
                 await signInWithCustomToken(auth, __initial_auth_token);
             } else {
+                console.log("Attempting Anonymous Auth...");
                 await signInAnonymously(auth);
             }
         } catch (err) {
-            console.error("Auth Error:", err);
-            document.getElementById('auth-status').innerText = "接続待機中 (Demo)";
-            // デモ用にボタンを強制有効化（Firebaseが使えない環境用）
-            document.getElementById('start-btn').disabled = false;
-            document.getElementById('start-btn').innerText = "オフラインで開始";
+            console.error("Auth Failed:", err);
+            // エラー時でも、もしconfig設定の不備であれば匿名ログインを再試行
+            if (err.code === 'auth/configuration-not-found') {
+                document.getElementById('auth-status').innerText = "認証設定エラー: 管理者に連絡してください";
+                document.getElementById('auth-status').classList.add('text-red-500');
+            }
         }
     };
 
     onAuthStateChanged(auth, (user) => {
         if (user) {
             currentUser = user;
-            document.getElementById('auth-status').innerText = "オンライン";
+            document.getElementById('auth-status').innerText = "オンライン: 同期準備完了";
+            document.getElementById('auth-status').classList.remove('text-blue-600', 'text-red-500');
+            document.getElementById('auth-status').classList.add('text-green-600');
             document.getElementById('start-btn').disabled = false;
             document.getElementById('start-btn').innerText = "迷路に入る";
-            document.getElementById('start-btn').classList.remove('bg-blue-400', 'cursor-not-allowed');
+            document.getElementById('start-btn').classList.remove('bg-gray-400', 'cursor-not-allowed');
             document.getElementById('start-btn').classList.add('bg-blue-600', 'hover:bg-blue-700');
-            document.getElementById('display-id').innerText = user.uid.slice(0, 6);
+            document.getElementById('display-id').innerText = user.uid; // Complete UID
             setupMultiplayerListeners();
         }
     });
 
-    initAuth();
+    await initAuth();
 }
 
 function generateFixedMaze() {
@@ -275,7 +289,7 @@ function createCharacter(outfit, name) {
     hatBase.position.y = 1.2;
     group.add(hatBase);
     
-    // Name Tag (コンパクト化)
+    // Name Tag
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 64; 
     const ctx = canvas.getContext('2d');
@@ -309,6 +323,7 @@ function createCharacter(outfit, name) {
 }
 
 function showChatBubble(charGroup, text) {
+    if (!charGroup || !charGroup.bubbleContainer) return;
     while(charGroup.bubbleContainer.children.length > 0) charGroup.bubbleContainer.remove(charGroup.bubbleContainer.children[0]);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -326,11 +341,12 @@ function showChatBubble(charGroup, text) {
     const aspect = canvas.width / 64;
     sprite.scale.set(0.3 * aspect, 0.3, 1); 
     charGroup.bubbleContainer.add(sprite);
-    setTimeout(() => charGroup.bubbleContainer.remove(sprite), 5000);
+    setTimeout(() => { if(charGroup && charGroup.bubbleContainer) charGroup.bubbleContainer.remove(sprite); }, 5000);
 }
 
 function setupMultiplayerListeners() {
     if (!currentUser) return;
+    // RULE 1: Strict Paths
     const playersRef = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     onSnapshot(playersRef, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
@@ -346,10 +362,10 @@ function setupMultiplayerListeners() {
                 players[id].rotation.y = data.rot;
             }
             if (change.type === "removed") {
-                scene.remove(players[id]); delete players[id];
+                if (players[id]) { scene.remove(players[id]); delete players[id]; }
             }
         });
-    });
+    }, (error) => console.error("Firestore Players Sync Error:", error));
 
     const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
     onSnapshot(chatRef, (snapshot) => {
@@ -364,15 +380,17 @@ function setupMultiplayerListeners() {
                 else if (players[data.uid]) showChatBubble(players[data.uid], data.text);
             }
         });
-    });
+    }, (error) => console.error("Firestore Chat Sync Error:", error));
 }
 
 async function updateMyPosition() {
     if (!currentUser || !isGameActive || !player) return;
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid), {
-        x: player.position.x, z: player.position.z, rot: player.rotation.y,
-        name: userName, outfit: myOutfit, lastSeen: serverTimestamp()
-    }, { merge: true });
+    try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid), {
+            x: player.position.x, z: player.position.z, rot: player.rotation.y,
+            name: userName, outfit: myOutfit, lastSeen: serverTimestamp()
+        }, { merge: true });
+    } catch(e) { console.error("Update Pos Error:", e); }
 }
 
 function animate() {
@@ -435,7 +453,9 @@ window.onkeyup = (e) => { const k = e.key.toLowerCase(); if (k==='w') keys.w=fal
 const st = (id, k) => { const el = document.getElementById(id); el.ontouchstart = (e) => { e.preventDefault(); keys[k]=true; }; el.ontouchend = () => keys[k]=false; };
 st('touch-up', 'touchUp'); st('touch-down', 'touchDown'); st('touch-left', 'touchLeft'); st('touch-right', 'touchRight');
 
-init(); animate();
+window.onload = () => {
+    init(); animate();
+};
 </script>
 </body>
 </html>

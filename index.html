@@ -14,7 +14,6 @@
         #chat-messages::-webkit-scrollbar { width: 4px; }
         #chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
         
-        /* カラーピッカーのスタイル調整 */
         input[type="color"] {
             -webkit-appearance: none;
             border: none;
@@ -114,8 +113,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebas
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, onSnapshot, collection, query, serverTimestamp, addDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-// --- Firebase Setup ---
-const firebaseConfig = JSON.parse(__firebase_config);
+// --- Firebase Configuration Guard (Fixed) ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+    apiKey: "demo", authDomain: "demo.firebaseapp.com", projectId: "demo-project", storageBucket: "demo.appspot.com", messagingSenderId: "000", appId: "000"
+};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -128,19 +129,9 @@ let myOutfit = { hat: '#ff0000', shirt: '#3b82f6', pants: '#22c55e' };
 
 // --- Random Name Generator ---
 const NAME_PARTS = {
-    part1: [
-        "やんちゃ", "クール", "クセ強", "個性的", "アウトロー", "無口", "皮肉屋", 
-        "陽キャ", "陰キャ", "理屈屋", "感覚派", "暴走気味", "冷静沈着", "ミステリアス", 
-        "自由人", "破天荒", "静かなる狂気", "職人気質", "理論武装", "直感型"
-    ],
-    part2: [
-        "な", "る", "的", "&", "の", "系", "属", "式", "風", "っぽい", "寄りの", "based", "with", "×"
-    ],
-    part3: [
-        "一般人", "ラッパー", "ゲーマー", "プログラマー", "ハッカー", "ストリーマー", 
-        "実況者", "クリエイター", "デバッガー", "設計者", "管理人", "研究者", 
-        "観測者", "探索者", "アナリスト", "モッダー", "チーター", "AI使い", "システム屋", "オタク"
-    ]
+    part1: ["やんちゃ", "クール", "クセ強", "個性的", "アウトロー", "無口", "陽キャ", "陰キャ", "ミステリアス", "自由人", "破天荒"],
+    part2: ["な", "る", "的", "の", "系", "式", "風", "っぽい"],
+    part3: ["一般人", "ラッパー", "ゲーマー", "プログラマー", "ハッカー", "ストリーマー", "クリエイター", "設計者", "探索者", "システム屋"]
 };
 
 function generateRandomName() {
@@ -162,7 +153,6 @@ let cameraAngleTheta = Math.PI;
 let isMouseDown = false;
 let mouseX = 0;
 
-// --- Initialize Game ---
 async function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0f172a); 
@@ -174,8 +164,7 @@ async function init() {
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(10, 30, 10);
     dirLight.castShadow = true;
@@ -204,7 +193,10 @@ async function init() {
             }
         } catch (err) {
             console.error("Auth Error:", err);
-            document.getElementById('auth-status').innerText = "接続エラー";
+            document.getElementById('auth-status').innerText = "接続待機中 (Demo)";
+            // デモ用にボタンを強制有効化（Firebaseが使えない環境用）
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('start-btn').innerText = "オフラインで開始";
         }
     };
 
@@ -221,12 +213,6 @@ async function init() {
         }
     });
 
-    // Load saved name from LocalStorage
-    const savedName = localStorage.getItem('maze_username');
-    if (savedName) {
-        document.getElementById('username-input').value = savedName;
-    }
-
     initAuth();
 }
 
@@ -240,7 +226,6 @@ function generateFixedMaze() {
             if(i%2==0 && j%2!==0 && Math.cos(i+j) > 0) mazeData[i][j] = 0;
         }
     }
-    mazeData[mazeSize-2][mazeSize-2] = 2; // Goal
 }
 
 function build3DMaze() {
@@ -263,192 +248,120 @@ function build3DMaze() {
                 wall.castShadow = true;
                 wall.receiveShadow = true;
                 mazeGroup.add(wall);
-            } else if (mazeData[y][x] === 2) {
-                const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0x443300 }));
-                goal.position.set(x, 1, y);
-                mazeGroup.add(goal);
             }
         }
     }
     scene.add(mazeGroup);
 }
 
-// アバター生成（着せ替え対応）
 function createCharacter(outfit, name) {
     const group = new THREE.Group();
-    
-    // 素材
     const shirtMat = new THREE.MeshStandardMaterial({ color: outfit?.shirt || 0x3b82f6 });
     const pantsMat = new THREE.MeshStandardMaterial({ color: outfit?.pants || 0x22c55e });
     const skinMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
     
-    // Body (Shirt)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.2), shirtMat);
     body.position.y = 0.6;
     body.castShadow = true;
     group.add(body);
     
-    // Head (Skin)
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), skinMat);
     head.position.y = 1.05;
     head.castShadow = true;
     group.add(head);
 
-    // Hat (Custom)
-    const hatGroup = new THREE.Group();
     const hatMat = new THREE.MeshStandardMaterial({ color: outfit?.hat || 0xff0000 });
     const hatBase = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16), hatMat);
     hatBase.position.y = 1.2;
-    hatGroup.add(hatBase);
-    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 16), hatMat);
-    hatBrim.position.y = 1.16;
-    hatGroup.add(hatBrim);
-    group.add(hatGroup);
+    group.add(hatBase);
     
-    // Name Tag - サイズ調整
+    // Name Tag (コンパクト化)
     const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 128; 
+    canvas.width = 256; canvas.height = 64; 
     const ctx = canvas.getContext('2d');
-    ctx.font = 'bold 60px sans-serif';
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.roundRect(0, 0, 512, 128, 20);
+    ctx.roundRect(0, 0, 256, 64, 15);
     ctx.fill();
     ctx.fillStyle = 'white'; 
+    ctx.font = 'bold 32px sans-serif';
     ctx.textAlign = 'center'; 
     ctx.textBaseline = 'middle';
-    ctx.fillText(name || "Player", 256, 64);
+    ctx.fillText(name || "Player", 128, 32);
     const tex = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: tex });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.position.y = 1.6; // 位置調整
-    sprite.scale.set(1.0, 0.25, 1); // サイズ縮小 (元: 2.0, 0.5, 1)
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+    sprite.position.y = 1.5;
+    sprite.scale.set(0.6, 0.15, 1); 
     group.add(sprite);
 
-    // Legs (Pants)
     group.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), pantsMat);
     group.leftLeg.position.set(-0.1, 0.2, 0);
-    group.leftLeg.castShadow = true;
     group.add(group.leftLeg);
     
     group.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), pantsMat);
     group.rightLeg.position.set(0.1, 0.2, 0);
-    group.rightLeg.castShadow = true;
     group.add(group.rightLeg);
 
-    // 吹き出し用コンテナ
     group.bubbleContainer = new THREE.Group();
-    group.bubbleContainer.position.set(0, 2.0, 0); // 吹き出し位置も少し調整
+    group.bubbleContainer.position.set(0, 1.8, 0);
     group.add(group.bubbleContainer);
 
     return group;
 }
 
-// 吹き出し表示
 function showChatBubble(charGroup, text) {
-    while(charGroup.bubbleContainer.children.length > 0){ 
-        charGroup.bubbleContainer.remove(charGroup.bubbleContainer.children[0]); 
-    }
-
+    while(charGroup.bubbleContainer.children.length > 0) charGroup.bubbleContainer.remove(charGroup.bubbleContainer.children[0]);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     ctx.font = '24px sans-serif';
-    const metrics = ctx.measureText(text);
-    const textWidth = metrics.width;
-    
+    const textWidth = ctx.measureText(text).width;
     canvas.width = Math.max(128, textWidth + 40);
     canvas.height = 64;
-    
-    const context = canvas.getContext('2d');
-    context.fillStyle = 'white';
-    context.beginPath();
-    context.roundRect(0, 0, canvas.width, 50, 10);
-    context.fill();
-    
-    context.beginPath();
-    context.moveTo(canvas.width/2 - 10, 50);
-    context.lineTo(canvas.width/2, 60);
-    context.lineTo(canvas.width/2 + 10, 50);
-    context.fill();
-
-    context.fillStyle = 'black';
-    context.font = '24px sans-serif';
-    context.textAlign = 'center';
-    context.fillText(text, canvas.width/2, 35);
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.roundRect(0, 0, canvas.width, 50, 10); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(canvas.width/2-10, 50); ctx.lineTo(canvas.width/2, 60); ctx.lineTo(canvas.width/2+10, 50); ctx.fill();
+    ctx.fillStyle = 'black'; ctx.textAlign = 'center'; ctx.fillText(text, canvas.width/2, 35);
 
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex });
-    const sprite = new THREE.Sprite(mat);
-    
-    // スケール調整: ワールド空間でのサイズを小さくする
-    // 係数を大きくしてサイズを縮小 (canvas.width / 150)
-    const aspect = canvas.width / 64; // height基準のアスペクト比
-    const baseHeight = 0.4; // ワールド座標での高さ
-    sprite.scale.set(baseHeight * aspect, baseHeight, 1); 
-    
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+    const aspect = canvas.width / 64;
+    sprite.scale.set(0.3 * aspect, 0.3, 1); 
     charGroup.bubbleContainer.add(sprite);
-
-    setTimeout(() => {
-        if(charGroup && charGroup.bubbleContainer) {
-            charGroup.bubbleContainer.remove(sprite);
-        }
-    }, 5000);
+    setTimeout(() => charGroup.bubbleContainer.remove(sprite), 5000);
 }
 
-// --- Multiplayer Logic ---
 function setupMultiplayerListeners() {
     if (!currentUser) return;
-
-    // Players Sync
     const playersRef = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     onSnapshot(playersRef, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
             const data = change.doc.data();
             const id = change.doc.id;
             if (id === currentUser.uid) return;
-
             if (change.type === "added" || change.type === "modified") {
                 if (!players[id]) {
-                    const outfit = data.outfit || { hat: '#888', shirt: '#888', pants: '#888' };
-                    players[id] = createCharacter(outfit, data.name);
+                    players[id] = createCharacter(data.outfit, data.name);
                     scene.add(players[id]);
                 }
                 players[id].position.set(data.x, 0, data.z);
                 players[id].rotation.y = data.rot;
-                
-                const time = Date.now() * 0.01;
-                players[id].leftLeg.rotation.x = Math.sin(time) * 0.5;
-                players[id].rightLeg.rotation.x = -Math.sin(time) * 0.5;
             }
             if (change.type === "removed") {
-                if (players[id]) {
-                    scene.remove(players[id]);
-                    delete players[id];
-                }
+                scene.remove(players[id]); delete players[id];
             }
         });
     });
 
-    // Chat Sync
     const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
     onSnapshot(chatRef, (snapshot) => {
-        const container = document.getElementById('chat-messages');
         snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
                 const data = change.doc.data();
-                
                 const div = document.createElement('div');
-                div.className = "break-words";
                 div.innerHTML = `<span class="font-bold text-blue-400">${data.sender}:</span> ${data.text}`;
-                container.appendChild(div);
-                container.scrollTop = container.scrollHeight;
-
-                if (data.uid) {
-                    if (data.uid === currentUser.uid && player) {
-                        showChatBubble(player, data.text);
-                    } else if (players[data.uid]) {
-                        showChatBubble(players[data.uid], data.text);
-                    }
-                }
+                document.getElementById('chat-messages').appendChild(div);
+                document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+                if (data.uid === currentUser?.uid) showChatBubble(player, data.text);
+                else if (players[data.uid]) showChatBubble(players[data.uid], data.text);
             }
         });
     });
@@ -456,86 +369,35 @@ function setupMultiplayerListeners() {
 
 async function updateMyPosition() {
     if (!currentUser || !isGameActive || !player) return;
-    try {
-        const myDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid);
-        await setDoc(myDoc, {
-            x: player.position.x,
-            z: player.position.z,
-            rot: player.rotation.y,
-            name: userName,
-            outfit: myOutfit, 
-            lastSeen: serverTimestamp()
-        }, { merge: true });
-    } catch (err) {
-        console.error("Pos Update Error", err);
-    }
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUser.uid), {
+        x: player.position.x, z: player.position.z, rot: player.rotation.y,
+        name: userName, outfit: myOutfit, lastSeen: serverTimestamp()
+    }, { merge: true });
 }
 
-async function sendChat() {
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
-    if (!text || !currentUser) return;
-    input.value = "";
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chat'), {
-            uid: currentUser.uid, 
-            sender: userName,
-            text: text,
-            createdAt: serverTimestamp()
-        });
-    } catch (err) {
-        console.error("Chat Send Error", err);
-    }
-}
-
-// --- Main Loop ---
 function animate() {
     requestAnimationFrame(animate);
-    if (!clock) return;
-    const delta = Math.min(clock.getDelta(), 0.1);
-    const time = clock.getElapsedTime();
-
+    const delta = clock ? Math.min(clock.getDelta(), 0.1) : 0.016;
     if (isGameActive && player) {
-        let inputX = 0, inputZ = 0;
-        
-        const activeTag = document.activeElement.tagName;
-        const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
-
-        if (!isTyping) {
-            if (keys.w || keys.touchUp) inputZ -= 1;
-            if (keys.s || keys.touchDown) inputZ += 1;
-            if (keys.a || keys.touchLeft) inputX -= 1;
-            if (keys.d || keys.touchRight) inputX += 1;
-        }
-
-        if (inputX !== 0 || inputZ !== 0) {
-            const moveSpeed = 5.0 * delta;
-            const moveDir = cameraAngleTheta + Math.atan2(inputX, inputZ);
-            const vx = Math.sin(moveDir) * moveSpeed;
-            const vz = Math.cos(moveDir) * moveSpeed;
-
-            const canMoveX = !checkWall(player.position.x + vx, player.position.z);
-            const canMoveZ = !checkWall(player.position.x, player.position.z + vz);
-            
-            if (canMoveX) player.position.x += vx;
-            if (canMoveZ) player.position.z += vz;
-            
+        let ix = 0, iz = 0;
+        if (keys.w || keys.touchUp) iz -= 1; if (keys.s || keys.touchDown) iz += 1;
+        if (keys.a || keys.touchLeft) ix -= 1; if (keys.d || keys.touchRight) ix += 1;
+        if (ix !== 0 || iz !== 0) {
+            const moveDir = cameraAngleTheta + Math.atan2(ix, iz);
+            const vx = Math.sin(moveDir) * 5.0 * delta;
+            const vz = Math.cos(moveDir) * 5.0 * delta;
+            if (!checkWall(player.position.x + vx, player.position.z)) player.position.x += vx;
+            if (!checkWall(player.position.x, player.position.z + vz)) player.position.z += vz;
             player.rotation.y = moveDir;
-            player.leftLeg.rotation.x = Math.sin(time * 12) * 0.6;
-            player.rightLeg.rotation.x = -Math.sin(time * 12) * 0.6;
-
-            if (Math.floor(time * 10) % 2 === 0) updateMyPosition();
-        } else {
-            player.leftLeg.rotation.x = 0;
-            player.rightLeg.rotation.x = 0;
+            player.leftLeg.rotation.x = Math.sin(Date.now()*0.012) * 0.6;
+            player.rightLeg.rotation.x = -Math.sin(Date.now()*0.012) * 0.6;
+            if (Math.random() > 0.8) updateMyPosition();
         }
-
         if (isFirstPerson) {
             camera.position.set(player.position.x, 1.0, player.position.z);
-            camera.lookAt(player.position.x + Math.sin(cameraAngleTheta + Math.PI), 1.0, player.position.z + Math.cos(cameraAngleTheta + Math.PI));
+            camera.lookAt(player.position.x + Math.sin(cameraAngleTheta+Math.PI), 1.0, player.position.z + Math.cos(cameraAngleTheta+Math.PI));
         } else {
-            const r = 5;
-            camera.position.set(player.position.x + r * Math.sin(cameraAngleTheta) * 0.6, 4, player.position.z + r * Math.cos(cameraAngleTheta) * 0.6);
+            camera.position.set(player.position.x + 3 * Math.sin(cameraAngleTheta), 4, player.position.z + 3 * Math.cos(cameraAngleTheta));
             camera.lookAt(player.position.x, 0.5, player.position.z);
         }
     }
@@ -543,92 +405,37 @@ function animate() {
 }
 
 function checkWall(nx, nz) {
-    const margin = 0.25;
-    const points = [{x:nx-margin,z:nz-margin}, {x:nx+margin,z:nz-margin}, {x:nx-margin,z:nz+margin}, {x:nx+margin,z:nz+margin}];
-    for(let p of points) {
-        const gx = Math.round(p.x), gy = Math.round(p.z);
-        if (gx < 0 || gx >= mazeSize || gy < 0 || gy >= mazeSize || mazeData[gy][gx] === 1) return true;
-    }
-    return false;
+    const gx = Math.round(nx), gy = Math.round(nz);
+    return gx < 0 || gx >= mazeSize || gy < 0 || gy >= mazeSize || mazeData[gy][gx] === 1;
 }
 
 function onWindowResize() {
-    if (!camera || !renderer) return;
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// --- Interaction UI ---
-document.getElementById('random-name-btn').addEventListener('click', () => {
-    const newName = generateRandomName();
-    document.getElementById('username-input').value = newName;
-});
-
-document.getElementById('start-btn').addEventListener('click', () => {
-    userName = document.getElementById('username-input').value || "Guest_" + currentUser.uid.slice(0,4);
-    
-    // Save name to localStorage
-    localStorage.setItem('maze_username', userName);
-
-    // Get Colors
-    myOutfit = {
-        hat: document.getElementById('color-hat').value,
-        shirt: document.getElementById('color-shirt').value,
-        pants: document.getElementById('color-pants').value
-    };
-
-    document.getElementById('start-menu').classList.add('hidden');
-    document.getElementById('game-ui').classList.remove('hidden');
-    
-    generateFixedMaze();
-    build3DMaze();
-    
-    player = createCharacter(myOutfit, userName);
-    player.position.set(1, 0, 1);
-    scene.add(player);
-    
-    isGameActive = true;
-    updateMyPosition();
-});
-
-document.getElementById('chat-send').addEventListener('click', sendChat);
-document.getElementById('chat-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
-document.getElementById('view-toggle-btn').addEventListener('click', () => isFirstPerson = !isFirstPerson);
-
-// Controls - Bug Fix: Reset keys on blur
-window.addEventListener('blur', () => {
-    keys.w = keys.a = keys.s = keys.d = false;
-});
-
-window.addEventListener('keydown', (e) => {
-    if (!e.key) return;
-    const k = e.key.toLowerCase();
-    
-    if (k === 'w' || e.code === 'ArrowUp') keys.w = true;
-    if (k === 's' || e.code === 'ArrowDown') keys.s = true;
-    if (k === 'a' || e.code === 'ArrowLeft') keys.a = true;
-    if (k === 'd' || e.code === 'ArrowRight') keys.d = true;
-});
-window.addEventListener('keyup', (e) => {
-    if (!e.key) return;
-    const k = e.key.toLowerCase();
-    if (k === 'w' || e.code === 'ArrowUp') keys.w = false;
-    if (k === 's' || e.code === 'ArrowDown') keys.s = false;
-    if (k === 'a' || e.code === 'ArrowLeft') keys.a = false;
-    if (k === 'd' || e.code === 'ArrowRight') keys.d = false;
-});
-
-const setupTouch = (id, k) => {
-    const el = document.getElementById(id);
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[k] = true; }, { passive: false });
-    el.addEventListener('touchend', (e) => { e.preventDefault(); keys[k] = false; }, { passive: false });
+document.getElementById('random-name-btn').onclick = () => document.getElementById('username-input').value = generateRandomName();
+document.getElementById('start-btn').onclick = () => {
+    userName = document.getElementById('username-input').value || "Guest";
+    myOutfit = { hat: document.getElementById('color-hat').value, shirt: document.getElementById('color-shirt').value, pants: document.getElementById('color-pants').value };
+    document.getElementById('start-menu').classList.add('hidden'); document.getElementById('game-ui').classList.remove('hidden');
+    generateFixedMaze(); build3DMaze();
+    player = createCharacter(myOutfit, userName); player.position.set(1, 0, 1); scene.add(player);
+    isGameActive = true; updateMyPosition();
 };
-setupTouch('touch-up', 'touchUp'); setupTouch('touch-down', 'touchDown');
-setupTouch('touch-left', 'touchLeft'); setupTouch('touch-right', 'touchRight');
+document.getElementById('chat-send').onclick = async () => {
+    const input = document.getElementById('chat-input'); const val = input.value.trim();
+    if (!val || !currentUser) return; input.value = "";
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chat'), { uid: currentUser.uid, sender: userName, text: val, createdAt: serverTimestamp() });
+};
+document.getElementById('view-toggle-btn').onclick = () => isFirstPerson = !isFirstPerson;
 
-init();
-animate();
+window.onkeydown = (e) => { const k = e.key.toLowerCase(); if (k==='w') keys.w=true; if (k==='s') keys.s=true; if (k==='a') keys.a=true; if (k==='d') keys.d=true; };
+window.onkeyup = (e) => { const k = e.key.toLowerCase(); if (k==='w') keys.w=false; if (k==='s') keys.s=false; if (k==='a') keys.a=false; if (k==='d') keys.d=false; };
+const st = (id, k) => { const el = document.getElementById(id); el.ontouchstart = (e) => { e.preventDefault(); keys[k]=true; }; el.ontouchend = () => keys[k]=false; };
+st('touch-up', 'touchUp'); st('touch-down', 'touchDown'); st('touch-left', 'touchLeft'); st('touch-right', 'touchRight');
+
+init(); animate();
 </script>
 </body>
 </html>
